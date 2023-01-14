@@ -113,13 +113,18 @@ static int kexec_boot(const std::filesystem::path& rootdir, bool quiet)
 
 	auto cmdline_args = parse_cmdline(cmdline);
 	std::string new_cmdline;
-	for (const auto& cmdline_arg:cmdline_args) {
+	bool has_fstab = std::filesystem::exists(rootdir / "etc" / "fstab");
+	bool has_rw = false;
+	for (const auto& arg:cmdline_args) {
 		if (new_cmdline != "") new_cmdline += ' ';
-		if (!cmdline_arg.starts_with("root=") && !cmdline_arg.starts_with("rootfstype=")) {
-			new_cmdline += cmdline_arg;
-		}
+		if (arg.starts_with("root=") || arg.starts_with("rootfstype=")) continue;
+		if (!has_fstab && arg == "ro") continue;
+		if (arg == "rw") has_rw = true;
+		//else
+		new_cmdline += arg;
 	}
 	new_cmdline += " root=" + device + " rootfstype=" + fstype;
+	if (!has_fstab && !has_rw) new_cmdline += " rw"; // always mount root filesystem r/w when fstab is missing
 
 	if (!quiet) {
 		std::cout << "Kernel=" << kernel->string() << std::endl;
@@ -132,8 +137,8 @@ static int kexec_boot(const std::filesystem::path& rootdir, bool quiet)
 	std::vector<const char*> argv = {"kexec", "-l", arg_append.c_str()};
 	if (initramfs) argv.push_back(arg_initrd.c_str());
 	argv.push_back(kernel->c_str());
-    argv.push_back(NULL);
-	return execvp("kexec",const_cast<char* const*>(argv.data()));
+	argv.push_back(NULL);
+	return execv("/usr/sbin/kexec",const_cast<char* const*>(argv.data()));
 }
 
 int main(int argc, char* argv[]) 
